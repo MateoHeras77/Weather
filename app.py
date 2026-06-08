@@ -159,7 +159,7 @@ def fetch_traffic_incidents(bbox, api_key):
     params = {
         "key": api_key,
         "bbox": bbox,
-        "fields": "{incidents{properties{id,iconCategory,magnitudeOfDelay,events{description,code},startTime,endTime,from,to,length,delay}}}",
+        "fields": "{incidents{geometry{type,coordinates},properties{id,iconCategory,magnitudeOfDelay,events{description,code},startTime,endTime,from,to,length,delay}}}",
         "language": "en-GB"
     }
     try:
@@ -330,9 +330,19 @@ def page_regional_overview():
             parsed_incidents = []
             for inc in incidents:
                 props = inc.get('properties', {})
+                geom = inc.get('geometry', {})
                 events = props.get('events', [])
                 desc = events[0].get('description', 'Unknown') if events else 'Unknown Incident'
                 
+                # Coordinate Extraction for Map Link
+                map_link = None
+                coords = geom.get('coordinates', [])
+                if coords and isinstance(coords, list):
+                    # Get first coord [lon, lat]
+                    first_coord = coords[0] if isinstance(coords[0], list) else coords
+                    lon_inc, lat_inc = first_coord[0], first_coord[1]
+                    map_link = f"https://www.google.com/maps/search/?api=1&query={lat_inc},{lon_inc}"
+
                 # Ensure we have numbers, not None
                 raw_delay = props.get('delay')
                 delay_sec = int(raw_delay) if raw_delay is not None else 0
@@ -353,28 +363,38 @@ def page_regional_overview():
                     except Exception:
                         pass
                 
+                # Determine Status (Closure vs Delay)
+                icon_cat = props.get('iconCategory', 6) # 0 is closure, 6 is unknown/general
+                is_closed = (icon_cat == 0) or ("closed" in desc.lower()) or ("blocked" in desc.lower())
+                status = "⛔ CLOSED" if is_closed else "⚠️ DELAY"
+                
                 # Only show impactful incidents (e.g. > 60 sec delay or closures)
-                if delay_sec > 60 or props.get('iconCategory') == 0:
+                if is_closed or delay_sec > 60:
                     parsed_incidents.append({
+                        "Status": status,
                         "Type": desc,
                         "From": props.get('from', 'Unknown'),
                         "To": props.get('to', 'Unknown'),
+                        "Link": map_link,
                         "Started (Mins Ago)": mins_ago,
-                        "Delay (Mins)": round(delay_sec / 60, 1),
+                        "Delay (Mins)": round(delay_sec / 60, 1) if not is_closed else "BLOCKAGE",
                         "Length (km)": round(length_m / 1000, 2),
                         "Severity": props.get('magnitudeOfDelay', 0)
                     })
                     
             if parsed_incidents:
                 inc_df = pd.DataFrame(parsed_incidents)
-                # Sort by highest delay
-                inc_df = inc_df.sort_values(by="Delay (Mins)", ascending=False).reset_index(drop=True)
+                # Sort by Closures first, then by highest delay
+                inc_df['sort_order'] = inc_df['Status'].apply(lambda x: 0 if "CLOSED" in x else 1)
+                inc_df = inc_df.sort_values(by=["sort_order", "Delay (Mins)"], ascending=[True, False]).drop(columns=['sort_order']).reset_index(drop=True)
                 
                 # Display dataframe with custom column config
                 st.dataframe(
                     inc_df, 
                     use_container_width=True,
                     column_config={
+                        "Status": st.column_config.TextColumn("Status", width="small"),
+                        "Link": st.column_config.LinkColumn("Map", display_text="📍 View"),
                         "Started (Mins Ago)": st.column_config.NumberColumn(
                             "Started",
                             help="How long ago the incident was reported",
