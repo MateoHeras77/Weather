@@ -421,29 +421,29 @@ def page_city_details():
         wind_dir = city_data.get('Wind Dir')
         wind_str = f"{wind_spd} km/h {wind_dir or ''}".strip() if pd.notna(wind_spd) else "N/A"
         
-        cols[0].metric("Temperature", f"{city_data['Temperature (°C)']} °C" if pd.notna(city_data['Temperature (°C)']) else "N/A")
-        cols[1].metric("Condition", city_data['Condition'])
-        cols[2].metric("Wind", wind_str)
-        cols[3].metric("Visibility", f"{city_data['Visibility (km)']} km" if pd.notna(city_data['Visibility (km)']) else "N/A")
-        cols[4].metric("Humidity", f"{city_data.get('Humidity (%)')}%" if pd.notna(city_data.get('Humidity (%)')) else "N/A")
+        cols[0].metric("🌡️ Temperature", f"{city_data['Temperature (°C)']} °C" if pd.notna(city_data['Temperature (°C)']) else "N/A")
+        cols[1].metric("☁️ Condition", city_data['Condition'])
+        cols[2].metric("💨 Wind", wind_str)
+        cols[3].metric("👁️ Visibility", f"{city_data['Visibility (km)']} km" if pd.notna(city_data['Visibility (km)']) else "N/A")
+        cols[4].metric("💧 Humidity", f"{city_data.get('Humidity (%)')}%" if pd.notna(city_data.get('Humidity (%)')) else "N/A")
         
         # Advanced Metrics
         st.write("#### Additional Metrics")
         cols2 = st.columns(5)
         
         wind_chill = city_data.get('Wind Chill')
-        cols2[0].metric("Wind Chill / Humidex", f"{wind_chill} °C" if pd.notna(wind_chill) else "N/A")
+        cols2[0].metric("🥶 Wind Chill / Humidex", f"{wind_chill} °C" if pd.notna(wind_chill) else "N/A")
         
         dewpoint = city_data.get('Dewpoint (°C)')
-        cols2[1].metric("Dewpoint", f"{dewpoint} °C" if pd.notna(dewpoint) else "N/A")
+        cols2[1].metric("🌫️ Dewpoint", f"{dewpoint} °C" if pd.notna(dewpoint) else "N/A")
         
         wind_gust = city_data.get('Wind Gust')
-        cols2[2].metric("Wind Gust", f"{wind_gust} km/h" if pd.notna(wind_gust) else "N/A")
+        cols2[2].metric("🌬️ Wind Gust", f"{wind_gust} km/h" if pd.notna(wind_gust) else "N/A")
         
         pressure = city_data.get('Pressure (kPa)')
         pressure_tend = city_data.get('Pressure Tendency')
         press_str = f"{pressure} kPa" if pd.notna(pressure) else "N/A"
-        cols2[3].metric("Pressure", press_str, delta=pressure_tend if pressure_tend else None, delta_color="off")
+        cols2[3].metric("⏲️ Pressure", press_str, delta=pressure_tend if pressure_tend else None, delta_color="off")
         
         props = city_data['RawProperties']
         
@@ -495,12 +495,23 @@ def page_city_details():
                     p_name = precip_acc.get('name', {}).get('en', 'precip').capitalize()
                     if p_amt is not None:
                         precip_str = f"{p_amt} {p_unit} {p_name}"
+                
+                # Fallback: Extract POP (Probability of Precipitation) from text if accumulation is None
+                if precip_str == "None":
+                    import re
+                    txt = d.get('textSummary', {}).get('en', '')
+                    # Look for "XX percent chance"
+                    match = re.search(r"(\d+)\s*percent\s*chance", txt, re.IGNORECASE)
+                    if match:
+                        precip_str = f"{match.group(1)}% Chance"
+                    elif "showers" in txt.lower() or "rain" in txt.lower() or "snow" in txt.lower():
+                        precip_str = "Likely"
                     
                 d_df.append({
                     'Period': d.get('period', {}).get('textForecastName', {}).get('en', 'Unknown'),
                     'Forecast': d.get('textSummary', {}).get('en', 'Unknown'),
                     'Temp (°C)': temp_val,
-                    'Precipitation': precip_str
+                    '☔ Precipitation': precip_str
                 })
             st.dataframe(pd.DataFrame(d_df), use_container_width=True)
         else:
