@@ -4,12 +4,45 @@ import pandas as pd
 import folium
 from streamlit_folium import st_folium
 import plotly.express as px
+from streamlit_autorefresh import st_autorefresh
 
 # Load environment variables (from Streamlit Secrets)
 TOMTOM_API_KEY = st.secrets.get("TOMTOM_API_KEY") if hasattr(st, "secrets") else None
 
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Purolator Weather Dashboard", layout="wide", page_icon="🌤️")
+
+# --- AUTO REFRESH ---
+if "auto_refresh" not in st.session_state:
+    st.session_state.auto_refresh = False
+
+with st.sidebar:
+    st.header("Controls")
+    
+    # Manual Refresh
+    if st.button("Refresh Data 🔄"):
+        fetch_weather_data.clear()
+        fetch_traffic_incidents.clear()
+        raw_data = fetch_weather_data()
+        st.session_state.df = process_geojson(raw_data)
+        st.rerun()
+        
+    st.markdown("---")
+    
+    # Auto Refresh Toggle
+    auto_refresh_toggle = st.checkbox("Enable Auto-Refresh (5 mins)", value=st.session_state.auto_refresh)
+    if auto_refresh_toggle != st.session_state.auto_refresh:
+        st.session_state.auto_refresh = auto_refresh_toggle
+        st.rerun()
+
+if st.session_state.auto_refresh:
+    # 300,000 ms = 5 minutes
+    count = st_autorefresh(interval=300000, limit=None, key="data_autorefresh")
+    if count > 0: # Clear cache on the interval ticks
+        fetch_weather_data.clear()
+        fetch_traffic_incidents.clear()
+        raw_data = fetch_weather_data()
+        st.session_state.df = process_geojson(raw_data)
 
 # --- DATA FETCHING ---
 API_URL = "https://api.weather.gc.ca/collections/citypageweather-realtime/items?f=json&limit=500"
@@ -109,15 +142,6 @@ if df.empty:
     st.warning("No data available. Please check the API.")
     st.stop()
 
-# --- SIDEBAR & REFRESH ---
-with st.sidebar:
-    st.header("Controls")
-    if st.button("Refresh Data 🔄"):
-        fetch_weather_data.clear()
-        raw_data = fetch_weather_data()
-        st.session_state.df = process_geojson(raw_data)
-        st.rerun()
-
 # --- TOMTOM DATA FETCHING ---
 ZONES = {
     "National View": {"center": [56.1304, -106.3468], "zoom": 4},
@@ -156,6 +180,24 @@ def page_regional_overview():
         st.markdown("Use the layer control icon (top right of map) to toggle Weather Radar, Satellite, and Traffic layers.")
     with col2:
         selected_zone = st.selectbox("Focus Map:", list(ZONES.keys()), index=0)
+        
+    with st.expander("🗺️ Map Legend & Icon Guide", expanded=False):
+        leg_col1, leg_col2 = st.columns(2)
+        with leg_col1:
+            st.markdown("""
+            **🌤️ Weather Markers (Cities)**
+            *   🟢 **Green:** Normal / Clear conditions.
+            *   🟠 **Orange:** Extreme Cold / Icy (<-15°C).
+            *   🔴 **Red:** Active Severe Weather Alert.
+            *   🟣 **Purple:** High Wind Danger (Gusts > 70km/h). High risk of trailer rollover.
+            """)
+        with leg_col2:
+            st.markdown("""
+            **🚗 TomTom Traffic Flow Lines**
+            *   🟡 **Yellow/Orange:** Minor congestion / slow traffic.
+            *   🔴 **Red:** Heavy congestion / significant delays.
+            *   🟤 **Dark Red:** Stopped traffic / extreme delay / road closure.
+            """)
     
     zone_data = ZONES[selected_zone]
 
@@ -208,8 +250,19 @@ def page_regional_overview():
         ).add_to(m)
 
     for idx, row in filtered_df.iterrows():
-        marker_color = 'red' if row['Has Alert'] else 'green'
-        if not row['Has Alert'] and row['Temperature (°C)'] is not None and row['Temperature (°C)'] < -15:
+        marker_color = 'green'
+        
+        # Wind Gust Logic (High Priority for Trucks)
+        try:
+            gust = float(row.get('Wind Gust', 0) or 0)
+        except:
+            gust = 0
+            
+        if gust > 70:
+            marker_color = 'purple' # High wind rollover danger
+        elif row['Has Alert']:
+            marker_color = 'red'
+        elif row['Temperature (°C)'] is not None and row['Temperature (°C)'] < -15:
             marker_color = 'orange'
             
         tooltip = f"{row['City']}: {row['Condition']}, {row['Temperature (°C)']}°C"
@@ -287,10 +340,26 @@ def page_regional_overview():
                 raw_length = props.get('length')
                 length_m = int(raw_length) if raw_length is not None else 0
                 
+                # Start Time Parsing
+                start_time_str = props.get('startTime')
+                mins_ago = 0
+                if start_time_str:
+                    try:
+                        st_time = pd.to_datetime(start_time_str, utc=True)
+                        now = pd.Timestamp.utcnow()
+                        diff = now - st_time
+                        mins_ago = int(diff.total_seconds() / 60)
+                        if mins_ago < 0: mins_ago = 0
+                    except Exception:
+                        pass
+                
                 # Only show impactful incidents (e.g. > 60 sec delay or closures)
                 if delay_sec > 60 or props.get('iconCategory') == 0:
                     parsed_incidents.append({
-                        "Type/Location": f"{desc} from {props.get('from', 'Unknown')} to {props.get('to', 'Unknown')}",
+                        "Type": desc,
+                        "From": props.get('from', 'Unknown'),
+                        "To": props.get('to', 'Unknown'),
+                        "Started (Mins Ago)": mins_ago,
                         "Delay (Mins)": round(delay_sec / 60, 1),
                         "Length (km)": round(length_m / 1000, 2),
                         "Severity": props.get('magnitudeOfDelay', 0)
@@ -300,7 +369,19 @@ def page_regional_overview():
                 inc_df = pd.DataFrame(parsed_incidents)
                 # Sort by highest delay
                 inc_df = inc_df.sort_values(by="Delay (Mins)", ascending=False).reset_index(drop=True)
-                st.dataframe(inc_df, use_container_width=True)
+                
+                # Display dataframe with custom column config
+                st.dataframe(
+                    inc_df, 
+                    use_container_width=True,
+                    column_config={
+                        "Started (Mins Ago)": st.column_config.NumberColumn(
+                            "Started",
+                            help="How long ago the incident was reported",
+                            format="%d mins ago"
+                        )
+                    }
+                )
             else:
                 st.success("No major traffic delays detected in this view right now.")
         else:
