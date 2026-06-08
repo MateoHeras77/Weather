@@ -4,12 +4,9 @@ import pandas as pd
 import folium
 from streamlit_folium import st_folium
 import plotly.express as px
-import os
-from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
-TOMTOM_API_KEY = os.getenv("TOMTOM_API_KEY")
+# Load environment variables (from Streamlit Secrets)
+TOMTOM_API_KEY = st.secrets.get("TOMTOM_API_KEY") if hasattr(st, "secrets") else None
 
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Purolator Weather Dashboard", layout="wide", page_icon="🌤️")
