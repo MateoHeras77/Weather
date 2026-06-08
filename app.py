@@ -356,7 +356,7 @@ def page_regional_overview():
                 if start_time_str:
                     try:
                         st_time = pd.to_datetime(start_time_str, utc=True)
-                        now = pd.Timestamp.utcnow()
+                        now = pd.Timestamp.now('UTC')
                         diff = now - st_time
                         mins_ago = int(diff.total_seconds() / 60)
                         if mins_ago < 0: mins_ago = 0
@@ -370,6 +370,9 @@ def page_regional_overview():
                 
                 # Only show impactful incidents (e.g. > 60 sec delay or closures)
                 if is_closed or delay_sec > 60:
+                    delay_val = round(delay_sec / 60, 1) if not is_closed else 0.0
+                    delay_display = "BLOCKAGE" if is_closed else str(delay_val)
+                    
                     parsed_incidents.append({
                         "Status": status,
                         "Type": desc,
@@ -377,7 +380,8 @@ def page_regional_overview():
                         "To": props.get('to', 'Unknown'),
                         "Link": map_link,
                         "Started (Mins Ago)": mins_ago,
-                        "Delay (Mins)": round(delay_sec / 60, 1) if not is_closed else "BLOCKAGE",
+                        "Delay (Mins)": delay_display,
+                        "delay_raw": delay_val, # Hidden for sorting
                         "Length (km)": round(length_m / 1000, 2),
                         "Severity": props.get('magnitudeOfDelay', 0)
                     })
@@ -386,12 +390,12 @@ def page_regional_overview():
                 inc_df = pd.DataFrame(parsed_incidents)
                 # Sort by Closures first, then by highest delay
                 inc_df['sort_order'] = inc_df['Status'].apply(lambda x: 0 if "CLOSED" in x else 1)
-                inc_df = inc_df.sort_values(by=["sort_order", "Delay (Mins)"], ascending=[True, False]).drop(columns=['sort_order']).reset_index(drop=True)
+                inc_df = inc_df.sort_values(by=["sort_order", "delay_raw"], ascending=[True, False]).drop(columns=['sort_order', 'delay_raw']).reset_index(drop=True)
                 
                 # Display dataframe with custom column config
                 st.dataframe(
                     inc_df, 
-                    use_container_width=True,
+                    width="stretch",
                     column_config={
                         "Status": st.column_config.TextColumn("Status", width="small"),
                         "Link": st.column_config.LinkColumn("Map", display_text="📍 View"),
