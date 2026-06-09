@@ -388,9 +388,13 @@ def page_regional_overview():
                     
             if parsed_incidents:
                 inc_df = pd.DataFrame(parsed_incidents)
-                # Sort by Closures first, then by highest delay
+                # Default sort: incidents that started most recently first in ascending elapsed time.
+                # Secondary sort keeps closures ahead when start times are equal.
                 inc_df['sort_order'] = inc_df['Status'].apply(lambda x: 0 if "CLOSED" in x else 1)
-                inc_df = inc_df.sort_values(by=["sort_order", "delay_raw"], ascending=[True, False]).drop(columns=['sort_order', 'delay_raw']).reset_index(drop=True)
+                inc_df = inc_df.sort_values(
+                    by=["Started (Mins Ago)", "sort_order", "delay_raw"],
+                    ascending=[True, True, False]
+                ).drop(columns=['sort_order', 'delay_raw']).reset_index(drop=True)
                 
                 # Display dataframe with custom column config
                 st.dataframe(
