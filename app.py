@@ -280,7 +280,7 @@ def page_regional_overview():
     folium.WmsTileLayer(
         url="https://geo.weather.gc.ca/geomet",
         layers="RADAR_1KM_RRSKS",
-        fmt="image/png",
+        format="image/png",
         transparent=True,
         name="Weather Radar",
         overlay=True,
@@ -291,9 +291,31 @@ def page_regional_overview():
     folium.WmsTileLayer(
         url="https://geo.weather.gc.ca/geomet",
         layers="GOES-16",
-        fmt="image/png",
+        format="image/png",
         transparent=True,
         name="Satellite Imagery",
+        overlay=True,
+        control=True,
+        show=False
+    ).add_to(m)
+    
+    folium.WmsTileLayer(
+        url="https://geo.weather.gc.ca/geomet",
+        layers="ALERTS",
+        format="image/png",
+        transparent=True,
+        name="Weather Alert Polygons",
+        overlay=True,
+        control=True,
+        show=False
+    ).add_to(m)
+    
+    folium.WmsTileLayer(
+        url="https://geo.weather.gc.ca/geomet",
+        layers="RDPA.24F_PR",
+        format="image/png",
+        transparent=True,
+        name="Precipitation (24h Accumulation)",
         overlay=True,
         control=True,
         show=False
@@ -696,15 +718,25 @@ def get_corridor_data(route_polyline, df, api_key):
             seen_cities.add(s['City'])
             
     # 2. Traffic Incidents along corridor
-    # Split route into chunks to respect TomTom's 10,000 sq km limit per request
-    num_chunks = 8 # Toronto to Montreal is ~540km, 8 chunks is ~65km each (safe area)
-    chunk_size = max(1, num_points // num_chunks)
-    
+    # Split route into chunks based on physical distance to strictly respect TomTom's 10,000 sq km limit
     raw_incidents = []
     seen_inc_ids = set()
     
-    for i in range(0, num_points, chunk_size):
-        chunk = route_polyline[i : i + chunk_size + 1]
+    chunk_start_idx = 0
+    while chunk_start_idx < num_points:
+        chunk_end_idx = chunk_start_idx
+        start_pt = route_polyline[chunk_start_idx]
+        
+        # Expand chunk until a point is more than 40km straight-line from the start point.
+        # This guarantees the chunk's bounding box is at most ~80x80km (6400 sq km), safely under 10,000.
+        while chunk_end_idx < num_points:
+            pt = route_polyline[chunk_end_idx]
+            dist = haversine_dist(start_pt[0], start_pt[1], pt[0], pt[1])
+            if dist > 40:
+                break
+            chunk_end_idx += 1
+            
+        chunk = route_polyline[chunk_start_idx : chunk_end_idx + 1]
         c_lats = [p[0] for p in chunk]
         c_lons = [p[1] for p in chunk]
         c_bbox = f"{min(c_lons)},{min(c_lats)},{max(c_lons)},{max(c_lats)}"
@@ -715,6 +747,8 @@ def get_corridor_data(route_polyline, df, api_key):
             if inc_id not in seen_inc_ids:
                 raw_incidents.append(inc)
                 seen_inc_ids.add(inc_id)
+                
+        chunk_start_idx = chunk_end_idx
     
     corridor_incidents = []
     for inc in raw_incidents:
@@ -780,6 +814,8 @@ def get_corridor_data(route_polyline, df, api_key):
             # 4. Local Streets: Everything else (drives, lanes, courts, crescents)
             else:
                 road_class = "🏘️ Local Street"
+                
+            map_link = f"https://www.google.com/maps/search/?api=1&query={inc_lat},{inc_lon}"
             
             corridor_incidents.append({
                 "Is Closed": is_closed,
@@ -789,6 +825,7 @@ def get_corridor_data(route_polyline, df, api_key):
                 "From": from_name if from_name else 'Unknown',
                 "To": to_name if to_name else 'Unknown',
                 "Started": mins_ago,
+                "Link": map_link,
                 "lat": inc_lat,
                 "lon": inc_lon
             })
@@ -878,7 +915,7 @@ def page_route_analysis():
                             selected_road = []
                     with f_col3:
                         time_options = ["Any Time", "Last 2 Hours", "Last 12 Hours", "Last 24 Hours", "Last 7 Days"]
-                        selected_time = st.selectbox("Time Since Reported", time_options, index=1)
+                        selected_time = st.selectbox("Time Since Reported", time_options, index=2)
                     
                     submit_filters = st.form_submit_button("Apply Filters")
                 
@@ -903,6 +940,42 @@ def page_route_analysis():
             # Origin/Dest Markers
             folium.Marker(rd['polyline'][0], tooltip="Origin", icon=folium.Icon(color='blue')).add_to(m)
             folium.Marker(rd['polyline'][-1], tooltip="Destination", icon=folium.Icon(color='red')).add_to(m)
+            
+            # Add WMS Layers to Route Map
+            folium.WmsTileLayer(
+                url="https://geo.weather.gc.ca/geomet",
+                layers="RADAR_1KM_RRSKS",
+                format="image/png",
+                transparent=True,
+                name="Weather Radar",
+                overlay=True,
+                control=True,
+                show=False
+            ).add_to(m)
+
+            folium.WmsTileLayer(
+                url="https://geo.weather.gc.ca/geomet",
+                layers="ALERTS",
+                format="image/png",
+                transparent=True,
+                name="Weather Alert Polygons",
+                overlay=True,
+                control=True,
+                show=False
+            ).add_to(m)
+
+            folium.WmsTileLayer(
+                url="https://geo.weather.gc.ca/geomet",
+                layers="RDPA.24F_PR",
+                format="image/png",
+                transparent=True,
+                name="Precipitation (24h Accumulation)",
+                overlay=True,
+                control=True,
+                show=False
+            ).add_to(m)
+            
+            folium.LayerControl().add_to(m)
             
             # Station Markers
             for s in rd['stations']:
@@ -929,10 +1002,10 @@ def page_route_analysis():
                     folium.Marker(
                         [inc['lat'], inc['lon']],
                         icon=folium.Icon(color=m_color, icon='info-sign'),
-                        tooltip=f"{rc}: {inc['Type']}"
+                        tooltip=f"{rc}: {inc['Type']} (Started {inc['Started']} mins ago)"
                     ).add_to(m)
             
-            st_folium(m, width=1200, height=500)
+            st_folium(m, width=1200, height=500, returned_objects=[])
             
             st.divider()
             
@@ -989,6 +1062,7 @@ def page_route_analysis():
                     display_df.drop(columns=['lat', 'lon', 'Is Closed']),
                     width='stretch',
                     column_config={
+                        "Link": st.column_config.LinkColumn("Map", display_text="📍 View"),
                         "Started": st.column_config.NumberColumn(
                             "Started",
                             help="How long ago the incident was reported",
