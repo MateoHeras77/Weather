@@ -230,7 +230,7 @@ def fetch_traffic_incidents(bbox, api_key):
     params = {
         "key": api_key,
         "bbox": bbox,
-        "fields": "{incidents{geometry{type,coordinates},properties{id,iconCategory,magnitudeOfDelay,events{description,code},startTime,endTime,from,to,length,delay}}}",
+        "fields": "{incidents{geometry{type,coordinates},properties{id,iconCategory,magnitudeOfDelay,events{description,code},startTime,endTime,from,to,length,delay,roadNumbers}}}",
         "language": "en-GB"
     }
     try:
@@ -571,7 +571,7 @@ def page_city_details():
                 labels={'x': 'Hours from now', 'y': 'Temperature (°C)'},
                 color_discrete_sequence=['#1C3F94']
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
         else:
             st.info("Hourly forecast data is currently unavailable for this location.")
             
@@ -613,15 +613,402 @@ def page_city_details():
                     'Temp (°C)': temp_val,
                     '☔ Precipitation': precip_str
                 })
-            st.dataframe(pd.DataFrame(d_df), use_container_width=True)
+            st.dataframe(pd.DataFrame(d_df), width='stretch')
         else:
             st.info("Daily forecast data is currently unavailable for this location.")
 
+import math
+
+# --- TOMTOM HELPERS ---
+@st.cache_data(ttl=3600)
+def geocode_city(query, api_key):
+    if not query or not api_key: return None
+    url = f"https://api.tomtom.com/search/2/geocode/{query}.json"
+    params = {"key": api_key, "limit": 1, "countrySet": "CA"}
+    try:
+        response = requests.get(url, params=params, timeout=10)
+        data = response.json()
+        if data.get('results'):
+            res = data['results'][0]
+            return {
+                "name": res.get('address', {}).get('freeformAddress'),
+                "lat": res.get('position', {}).get('lat'),
+                "lon": res.get('position', {}).get('lon')
+            }
+    except Exception as e:
+        st.error(f"Geocoding error: {e}")
+    return None
+
+@st.cache_data(ttl=600)
+def fetch_route(origin_coords, dest_coords, api_key):
+    if not origin_coords or not dest_coords or not api_key: return None
+    # locations format: lat,lon:lat,lon
+    locs = f"{origin_coords['lat']},{origin_coords['lon']}:{dest_coords['lat']},{dest_coords['lon']}"
+    url = f"https://api.tomtom.com/routing/1/calculateRoute/{locs}/json"
+    params = {"key": api_key, "traffic": "true"}
+    try:
+        response = requests.get(url, params=params, timeout=10)
+        data = response.json()
+        if data.get('routes'):
+            route = data['routes'][0]
+            points = []
+            for leg in route.get('legs', []):
+                for pt in leg.get('points', []):
+                    points.append([pt['latitude'], pt['longitude']])
+            return {
+                "polyline": points,
+                "summary": route.get('summary', {})
+            }
+    except Exception as e:
+        st.error(f"Routing error: {e}")
+    return None
+
+def haversine_dist(lat1, lon1, lat2, lon2):
+    R = 6371 # Earth radius in km
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = math.sin(dlat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon/2)**2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+    return R * c
+
+def get_corridor_data(route_polyline, df, api_key):
+    if not route_polyline: return [], []
+    
+    # 1. Weather Waypoints (5 intervals)
+    num_points = len(route_polyline)
+    indices = [0, int(num_points*0.25), int(num_points*0.5), int(num_points*0.75), num_points-1]
+    waypoint_stations = []
+    
+    for idx in indices:
+        lat, lon = route_polyline[idx]
+        # Find closest station in df
+        df['temp_dist'] = df.apply(lambda row: haversine_dist(lat, lon, row['Latitude'], row['Longitude']), axis=1)
+        closest_row = df.loc[df['temp_dist'].idxmin()].copy()
+        if closest_row['temp_dist'] < 50: # Only if within 50km
+            waypoint_stations.append(closest_row)
+            
+    # Remove duplicates while preserving order
+    unique_stations = []
+    seen_cities = set()
+    for s in waypoint_stations:
+        if s['City'] not in seen_cities:
+            unique_stations.append(s)
+            seen_cities.add(s['City'])
+            
+    # 2. Traffic Incidents along corridor
+    # Split route into chunks to respect TomTom's 10,000 sq km limit per request
+    num_chunks = 8 # Toronto to Montreal is ~540km, 8 chunks is ~65km each (safe area)
+    chunk_size = max(1, num_points // num_chunks)
+    
+    raw_incidents = []
+    seen_inc_ids = set()
+    
+    for i in range(0, num_points, chunk_size):
+        chunk = route_polyline[i : i + chunk_size + 1]
+        c_lats = [p[0] for p in chunk]
+        c_lons = [p[1] for p in chunk]
+        c_bbox = f"{min(c_lons)},{min(c_lats)},{max(c_lons)},{max(c_lats)}"
+        
+        chunk_incidents = fetch_traffic_incidents(c_bbox, api_key)
+        for inc in chunk_incidents:
+            inc_id = inc.get('properties', {}).get('id')
+            if inc_id not in seen_inc_ids:
+                raw_incidents.append(inc)
+                seen_inc_ids.add(inc_id)
+    
+    corridor_incidents = []
+    for inc in raw_incidents:
+        geom = inc.get('geometry', {})
+        coords = geom.get('coordinates', [])
+        if not coords: continue
+        
+        # Check if incident is within 10km of ANY route point (optimized: check every 10th point)
+        first_coord = coords[0] if isinstance(coords[0], list) else coords
+        inc_lon, inc_lat = first_coord[0], first_coord[1]
+        
+        is_near = False
+        for i in range(0, len(route_polyline), 10):
+            rpt = route_polyline[i]
+            if haversine_dist(inc_lat, inc_lon, rpt[0], rpt[1]) < 10:
+                is_near = True
+                break
+        
+        if is_near:
+            props = inc.get('properties', {})
+            events = props.get('events', [])
+            desc = events[0].get('description', 'Unknown') if events else 'Unknown'
+            raw_delay = props.get('delay', 0)
+            delay = int(raw_delay) if raw_delay is not None else 0
+            
+            # Start Time Parsing
+            start_time_str = props.get('startTime')
+            mins_ago = 0
+            if start_time_str:
+                try:
+                    st_time = pd.to_datetime(start_time_str, utc=True)
+                    now = pd.Timestamp.now('UTC')
+                    diff = now - st_time
+                    mins_ago = int(diff.total_seconds() / 60)
+                    if mins_ago < 0: mins_ago = 0
+                except Exception:
+                    pass
+            
+            icon_cat = props.get('iconCategory', 6)
+            is_closed = (icon_cat == 0) or ("closed" in desc.lower()) or ("blocked" in desc.lower())
+            
+            # Classify Road (4-Tier System)
+            road_numbers = props.get('roadNumbers', [])
+            from_name = props.get('from', '')
+            to_name = props.get('to', '')
+            combined_names = (from_name + " " + to_name).lower()
+            
+            # Extract just the primary street name without the parenthetical intersections (e.g. "Hwy-11/Yonge St (Carlton St)" -> "Hwy-11/Yonge St")
+            import re
+            primary_from = re.sub(r'\(.*?\)', '', from_name).strip().lower()
+            primary_to = re.sub(r'\(.*?\)', '', to_name).strip().lower()
+            primary_names = primary_from + " " + primary_to
+            
+            # 1. Ramps & Exits (Crucial for logistics to distinguish from full highway closures)
+            if any(kw in primary_names for kw in ['ramp', 'exit', 'sortie', 'interchange', 'bretelle']):
+                road_class = "🔀 Highway Exit / Ramp"
+            # 2. Major Highways: Must have an official number OR strongly match a highway keyword in the primary name
+            elif road_numbers or any(kw in primary_names for kw in ['hwy', 'highway', 'expy', 'expressway', 'fwy', 'freeway', 'pkwy', 'parkway', 'autoroute', 'transcanadienne', '401', '400', '404', '407', 'qew', 'a-', 'on-', 'qc-']):
+                road_class = "🛣️ Major Highway"
+            # 3. Arterial Roads: Major city streets and regional routes
+            elif any(kw in combined_names for kw in ['ave', 'avenue', 'blvd', 'boulevard', 'rd', 'road', 'st', 'street', 'rte', 'route', 'line', 'concession', 'county']):
+                road_class = "🚙 Arterial Road"
+            # 4. Local Streets: Everything else (drives, lanes, courts, crescents)
+            else:
+                road_class = "🏘️ Local Street"
+            
+            corridor_incidents.append({
+                "Is Closed": is_closed,
+                "Road Class": road_class,
+                "Type": desc,
+                "Delay (Mins)": str(round(delay/60, 1)) if not is_closed else "BLOCKAGE",
+                "From": from_name if from_name else 'Unknown',
+                "To": to_name if to_name else 'Unknown',
+                "Started": mins_ago,
+                "lat": inc_lat,
+                "lon": inc_lon
+            })
+            
+    return unique_stations, corridor_incidents
+
+# --- PAGE 3: ROUTE ANALYSIS ---
+def page_route_analysis():
+    st.title("Logistics Weather: Route Analysis")
+    st.markdown("Analyze weather and traffic corridor for specific shipping routes.")
+    
+    # Prepare city list for dropdown
+    city_options = df['City'].sort_values().unique().tolist()
+    
+    col_in1, col_in2, col_btn = st.columns([2, 2, 1])
+    with col_in1:
+        origin_city = st.selectbox("Origin City", city_options, index=None, placeholder="Select start city...")
+    with col_in2:
+        dest_city = st.selectbox("Destination City", city_options, index=None, placeholder="Select end city...")
+    with col_btn:
+        st.write("##") # Spacer
+        calculate = st.button("Analyze Route 🛣️")
+        
+    if calculate or "current_route" in st.session_state:
+        if calculate:
+            if not origin_city or not dest_city:
+                st.error("Please select both an origin and a destination city.")
+            elif origin_city == dest_city:
+                st.error("Origin and destination must be different.")
+            else:
+                with st.spinner("Calculating route and safety corridor..."):
+                    # Get coords directly from our dataframe
+                    orig_row = df[df['City'] == origin_city].iloc[0]
+                    dest_row = df[df['City'] == dest_city].iloc[0]
+                    
+                    orig = {"name": origin_city, "lat": orig_row['Latitude'], "lon": orig_row['Longitude']}
+                    dest = {"name": dest_city, "lat": dest_row['Latitude'], "lon": dest_row['Longitude']}
+                    
+                    route_data = fetch_route(orig, dest, TOMTOM_API_KEY)
+                    if route_data:
+                        stations, incidents = get_corridor_data(route_data['polyline'], df, TOMTOM_API_KEY)
+                        st.session_state.current_route = {
+                            "orig": orig,
+                            "dest": dest,
+                            "polyline": route_data['polyline'],
+                            "summary": route_data['summary'],
+                            "stations": stations,
+                            "incidents": incidents
+                        }
+                    else:
+                        st.error(f"Could not calculate road route between {origin_city} and {dest_city}.")
+
+        if "current_route" in st.session_state:
+            rd = st.session_state.current_route
+            
+            # Summary Metrics
+            dist_km = round(rd['summary'].get('lengthInMeters', 0) / 1000, 1)
+            time_min = round(rd['summary'].get('travelTimeInSeconds', 0) / 60)
+            
+            met1, met2, met3 = st.columns(3)
+            met1.metric("Trip Distance", f"{dist_km} km")
+            met2.metric("Est. Travel Time", f"{time_min} mins")
+            met3.metric("Waypoints Found", len(rd['stations']))
+            
+            st.divider()
+            
+            # Incident Filtering (Move above map)
+            st.subheader("Route Safety Corridor")
+            filtered_inc_df = pd.DataFrame()
+            if rd['incidents']:
+                inc_df = pd.DataFrame(rd['incidents'])
+                
+                # Safety check for 'Started' column (prevents KeyError from old session data)
+                if 'Started' not in inc_df.columns:
+                    inc_df['Started'] = 0
+                
+                with st.form("incident_filters_form"):
+                    f_col1, f_col2, f_col3 = st.columns(3)
+                    with f_col1:
+                        type_options = sorted(inc_df['Type'].unique().tolist())
+                        selected_type = st.multiselect("Filter incidents by Type", type_options, default=type_options)
+                    with f_col2:
+                        if 'Road Class' in inc_df.columns:
+                            road_options = sorted(inc_df['Road Class'].unique().tolist())
+                            selected_road = st.multiselect("Filter incidents by Road Class", road_options, default=road_options)
+                        else:
+                            selected_road = []
+                    with f_col3:
+                        time_options = ["Any Time", "Last 2 Hours", "Last 12 Hours", "Last 24 Hours", "Last 7 Days"]
+                        selected_time = st.selectbox("Time Since Reported", time_options, index=1)
+                    
+                    submit_filters = st.form_submit_button("Apply Filters")
+                
+                # Convert time selection to minutes
+                max_mins = float('inf')
+                if selected_time == "Last 2 Hours": max_mins = 120
+                elif selected_time == "Last 12 Hours": max_mins = 720
+                elif selected_time == "Last 24 Hours": max_mins = 1440
+                elif selected_time == "Last 7 Days": max_mins = 10080
+                
+                time_filtered_df = inc_df[inc_df['Started'] <= max_mins]
+                
+                if 'Road Class' in time_filtered_df.columns:
+                    filtered_inc_df = time_filtered_df[(time_filtered_df['Type'].isin(selected_type)) & (time_filtered_df['Road Class'].isin(selected_road))]
+                else:
+                    filtered_inc_df = time_filtered_df[time_filtered_df['Type'].isin(selected_type)]
+            
+            # Map
+            m = folium.Map(location=rd['polyline'][0], zoom_start=6)
+            folium.PolyLine(rd['polyline'], color="#1C3F94", weight=5, opacity=0.8).add_to(m)
+            
+            # Origin/Dest Markers
+            folium.Marker(rd['polyline'][0], tooltip="Origin", icon=folium.Icon(color='blue')).add_to(m)
+            folium.Marker(rd['polyline'][-1], tooltip="Destination", icon=folium.Icon(color='red')).add_to(m)
+            
+            # Station Markers
+            for s in rd['stations']:
+                folium.CircleMarker(
+                    location=[s['Latitude'], s['Longitude']],
+                    radius=6, color='green', fill=True,
+                    tooltip=f"Waypoint: {s['City']} ({s['Temperature (°C)']}°C)"
+                ).add_to(m)
+                
+            # Incident Markers (Filtered)
+            if not filtered_inc_df.empty:
+                for idx, inc in filtered_inc_df.iterrows():
+                    # Color based on Road Class hierarchy
+                    rc = inc.get('Road Class', '')
+                    if 'Major Highway' in rc:
+                        m_color = 'red'
+                    elif 'Exit / Ramp' in rc:
+                        m_color = 'purple'
+                    elif 'Arterial' in rc:
+                        m_color = 'orange'
+                    else:
+                        m_color = 'lightblue'
+                        
+                    folium.Marker(
+                        [inc['lat'], inc['lon']],
+                        icon=folium.Icon(color=m_color, icon='info-sign'),
+                        tooltip=f"{rc}: {inc['Type']}"
+                    ).add_to(m)
+            
+            st_folium(m, width=1200, height=500)
+            
+            st.divider()
+            
+            # Weather Waypoints Cards
+            st.subheader("Weather Corridor (Step-by-Step)")
+            w_cols = st.columns(len(rd['stations']))
+            for i, s in enumerate(rd['stations']):
+                with w_cols[i]:
+                    st.markdown(f"**{s['City']}**")
+                    st.metric("Temp", f"{s['Temperature (°C)']}°C")
+                    st.write(f"_{s['Condition']}_")
+                    
+                    # Core Metrics Vertical View
+                    wind_spd = s.get('Wind Speed (km/h)')
+                    wind_dir = s.get('Wind Dir')
+                    wind_str = f"{wind_spd} km/h {wind_dir or ''}".strip() if pd.notna(wind_spd) else "N/A"
+                    
+                    # Snow/Rain Detection
+                    cond_text = s['Condition'].lower()
+                    precip_icon = "❄️" if "snow" in cond_text else "☔" if "rain" in cond_text or "shower" in cond_text else ""
+                    
+                    st.write(f"💨 **Wind:** {wind_str}")
+                    st.write(f"💧 **Humidity:** {s.get('Humidity (%)')}%" if pd.notna(s.get('Humidity (%)')) else "💧 **Humidity:** N/A")
+                    
+                    # Extract precip from forecast if available
+                    props = s.get('RawProperties', {})
+                    forecasts = props.get('forecastGroup', {}).get('forecasts', [])
+                    precip_info = "None"
+                    if forecasts:
+                        first_f = forecasts[0]
+                        # Try to find POP (Probability of Precipitation)
+                        import re
+                        txt = first_f.get('textSummary', {}).get('en', '')
+                        match = re.search(r"(\d+)\s*percent\s*chance", txt, re.IGNORECASE)
+                        if match:
+                            precip_info = f"{match.group(1)}% Chance"
+                        elif "snow" in txt.lower() or "rain" in txt.lower():
+                            precip_info = "Likely"
+                    
+                    st.write(f"{precip_icon or '☁️'} **Precipitation:** {precip_info}")
+                    
+                    if s['Has Alert']:
+                        st.warning(f"⚠️ {s['Alerts']}")
+                        
+            st.divider()
+            
+            # Incidents Table (Already Filtered)
+            st.subheader("Traffic Incidents Detail Table")
+            if not filtered_inc_df.empty:
+                # Sort Ascending by Started time
+                display_df = filtered_inc_df.sort_values(by="Started", ascending=True)
+                
+                st.dataframe(
+                    display_df.drop(columns=['lat', 'lon', 'Is Closed']),
+                    width='stretch',
+                    column_config={
+                        "Started": st.column_config.NumberColumn(
+                            "Started",
+                            help="How long ago the incident was reported",
+                            format="%d mins ago"
+                        )
+                    }
+                )
+            elif rd['incidents']:
+                st.info("No incidents match the selected filters.")
+            else:
+                st.success("No significant traffic incidents detected on this route.")
+
 # --- MAIN NAVIGATION ---
-tab_regional, tab_city = st.tabs(["🗺️ Regional Overview", "🏙️ City Details"])
+tab_regional, tab_city, tab_route = st.tabs(["🗺️ Regional Overview", "🏙️ City Details", "🛣️ Route Analysis"])
 
 with tab_regional:
     page_regional_overview()
 
 with tab_city:
     page_city_details()
+
+with tab_route:
+    page_route_analysis()
