@@ -12,13 +12,85 @@ TOMTOM_API_KEY = st.secrets.get("TOMTOM_API_KEY") if hasattr(st, "secrets") else
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Purolator Weather Dashboard", layout="wide", page_icon="🌤️")
 
-# --- AUTO REFRESH ---
+# Custom CSS for Purolator Branding
+st.markdown("""
+<style>
+    /* Main Header Background and Text */
+    header[data-testid="stHeader"] {
+        background-color: #1C3F94 !important;
+    }
+    header[data-testid="stHeader"] * {
+        color: white !important;
+    }
+    
+    /* Hide Sidebar */
+    [data-testid="stSidebar"] {
+        display: none;
+    }
+    
+    /* Main Content Padding */
+    .main .block-container {
+        padding-top: 1rem;
+    }
+
+    /* Primary Titles */
+    h1, h2, h3 {
+        color: #1C3F94 !important;
+    }
+
+    /* Buttons (CTAs) */
+    .stButton>button {
+        background-color: #EE3124 !important;
+        color: white !important;
+        border-radius: 4px;
+        border: none;
+        width: 100%;
+    }
+    
+    .stButton>button:hover {
+        background-color: #D22B1F !important;
+    }
+    
+    /* Expander styling */
+    .streamlit-expanderHeader {
+        color: #1C3F94 !important;
+    }
+
+    /* Tabs Styling */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 24px;
+        border-bottom: 2px solid #F0F2F6;
+    }
+
+    .stTabs [data-baseweb="tab"] {
+        height: 50px;
+        white-space: pre-wrap;
+        background-color: transparent;
+        border-radius: 4px 4px 0px 0px;
+        color: #262730;
+        font-weight: 600;
+        font-size: 16px;
+    }
+
+    .stTabs [aria-selected="true"] {
+        background-color: #F0F2F6 !important;
+        color: #1C3F94 !important;
+        border-bottom: 3px solid #EE3124 !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# --- AUTO REFRESH LOGIC ---
 if "auto_refresh" not in st.session_state:
     st.session_state.auto_refresh = False
 
-with st.sidebar:
-    st.header("Controls")
-    
+# --- APP HEADER ---
+head_col1, head_col2, head_col3 = st.columns([2, 1, 1])
+
+with head_col1:
+    st.image("logo.svg", width=300)
+
+with head_col2:
     # Manual Refresh
     if st.button("Refresh Data 🔄"):
         fetch_weather_data.clear()
@@ -26,11 +98,10 @@ with st.sidebar:
         raw_data = fetch_weather_data()
         st.session_state.df = process_geojson(raw_data)
         st.rerun()
-        
-    st.markdown("---")
-    
+
+with head_col3:
     # Auto Refresh Toggle
-    auto_refresh_toggle = st.checkbox("Enable Auto-Refresh (5 mins)", value=st.session_state.auto_refresh)
+    auto_refresh_toggle = st.checkbox("Auto-Refresh (5m)", value=st.session_state.auto_refresh)
     if auto_refresh_toggle != st.session_state.auto_refresh:
         st.session_state.auto_refresh = auto_refresh_toggle
         st.rerun()
@@ -45,7 +116,7 @@ if st.session_state.auto_refresh:
         st.session_state.df = process_geojson(raw_data)
 
 # --- DATA FETCHING ---
-API_URL = "https://api.weather.gc.ca/collections/citypageweather-realtime/items?f=json&limit=500"
+API_URL = "https://api.weather.gc.ca/collections/citypageweather-realtime/items?f=json&limit=1000"
 
 @st.cache_data(ttl=600) # Cache for 10 minutes
 def fetch_weather_data():
@@ -188,7 +259,7 @@ def page_regional_overview():
             **🌤️ Weather Markers (Cities)**
             *   🟢 **Green:** Normal / Clear conditions.
             *   🟠 **Orange:** Extreme Cold / Icy (<-15°C).
-            *   🔴 **Red:** Active Severe Weather Alert.
+            *   🔴 **Red (#EE3124):** Active Severe Weather Alert.
             *   🟣 **Purple:** High Wind Danger (Gusts > 70km/h). High risk of trailer rollover.
             """)
         with leg_col2:
@@ -201,7 +272,7 @@ def page_regional_overview():
     
     zone_data = ZONES[selected_zone]
 
-    show_alerts_only = st.sidebar.checkbox("🚨 Show only cities with active alerts", value=False)
+    show_alerts_only = st.checkbox("🚨 Show only cities with active alerts", value=False)
     filtered_df = df[df['Has Alert'] == True] if show_alerts_only else df
 
     m = folium.Map(location=zone_data["center"], zoom_start=zone_data["zoom"])
@@ -261,7 +332,7 @@ def page_regional_overview():
         if gust > 70:
             marker_color = 'purple' # High wind rollover danger
         elif row['Has Alert']:
-            marker_color = 'red'
+            marker_color = '#EE3124' # Brand Red
         elif row['Temperature (°C)'] is not None and row['Temperature (°C)'] < -15:
             marker_color = 'orange'
             
@@ -497,7 +568,8 @@ def page_city_details():
                 y=h_temps, 
                 markers=True, 
                 title="Hourly Temperature Trend",
-                labels={'x': 'Hours from now', 'y': 'Temperature (°C)'}
+                labels={'x': 'Hours from now', 'y': 'Temperature (°C)'},
+                color_discrete_sequence=['#1C3F94']
             )
             st.plotly_chart(fig, use_container_width=True)
         else:
@@ -545,10 +617,11 @@ def page_city_details():
         else:
             st.info("Daily forecast data is currently unavailable for this location.")
 
-# --- NAVIGATION ---
-pg = st.navigation([
-    st.Page(page_regional_overview, title="Regional Overview", icon="🗺️"),
-    st.Page(page_city_details, title="City Details", icon="🏙️")
-])
+# --- MAIN NAVIGATION ---
+tab_regional, tab_city = st.tabs(["🗺️ Regional Overview", "🏙️ City Details"])
 
-pg.run()
+with tab_regional:
+    page_regional_overview()
+
+with tab_city:
+    page_city_details()
