@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import IntEnum
+import math
 from typing import Any
 
 
@@ -132,6 +133,36 @@ class DataFreshness:
 
 
 @dataclass(frozen=True)
+class MapBounds:
+    south: float
+    west: float
+    north: float
+    east: float
+
+    @property
+    def center(self) -> tuple[float, float]:
+        south_y = math.log(
+            math.tan(math.pi / 4 + math.radians(self.south) / 2)
+        )
+        north_y = math.log(
+            math.tan(math.pi / 4 + math.radians(self.north) / 2)
+        )
+        latitude = math.degrees(
+            2 * math.atan(math.exp((south_y + north_y) / 2)) - math.pi / 2
+        )
+        longitude = (self.west + self.east) / 2
+        return latitude, longitude
+
+    def contains(self, latitude: float, longitude: float) -> bool:
+        latitude_matches = self.south <= latitude <= self.north
+        if self.west <= self.east:
+            longitude_matches = self.west <= longitude <= self.east
+        else:
+            longitude_matches = longitude >= self.west or longitude <= self.east
+        return latitude_matches and longitude_matches
+
+
+@dataclass(frozen=True)
 class OperationalRisk:
     id: str
     kind: str
@@ -149,9 +180,37 @@ class OperationalRisk:
 
 
 @dataclass(frozen=True)
+class RouteEndpoint:
+    id: str
+    name: str
+    latitude: float
+    longitude: float
+    source: str
+
+
+@dataclass(frozen=True)
+class RouteRequest:
+    id: str
+    label: str
+    origin: RouteEndpoint
+    destination: RouteEndpoint
+    corridor_id: str | None = None
+
+
+@dataclass(frozen=True)
 class RouteResult:
-    corridor_id: str
+    request_id: str
     points: tuple[tuple[float, float], ...]
     distance_m: int
     travel_time_seconds: int
     traffic_delay_seconds: int
+
+
+@dataclass(frozen=True)
+class RouteAnalysis:
+    request: RouteRequest
+    route: RouteResult
+    weather_stations: tuple[WeatherStation, ...]
+    incidents: tuple[TrafficIncident, ...]
+    severity: Severity
+    errors: tuple[str, ...] = ()

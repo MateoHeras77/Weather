@@ -2,21 +2,20 @@ from __future__ import annotations
 
 import requests
 
-from ..models import Corridor, Hub, RouteResult, TruckProfile
+from ..models import RouteRequest, RouteResult, TruckProfile
 
 
 def fetch_route(
     base_url: str,
-    corridor: Corridor,
-    hubs_by_id: dict[str, Hub],
+    route_request: RouteRequest,
     truck: TruckProfile,
     api_key: str,
     timeout_seconds: int,
     user_agent: str,
     session: requests.Session | None = None,
 ) -> RouteResult | None:
-    origin = hubs_by_id[corridor.origin_hub_id]
-    destination = hubs_by_id[corridor.destination_hub_id]
+    origin = route_request.origin
+    destination = route_request.destination
     locations = (
         f"{origin.latitude},{origin.longitude}:"
         f"{destination.latitude},{destination.longitude}"
@@ -56,7 +55,7 @@ def fetch_route(
         )
         summary = route.get("summary") or {}
         return RouteResult(
-            corridor_id=corridor.id,
+            request_id=route_request.id,
             points=points,
             distance_m=int(summary.get("lengthInMeters") or 0),
             travel_time_seconds=int(summary.get("travelTimeInSeconds") or 0),
@@ -64,4 +63,3 @@ def fetch_route(
         )
     except (requests.RequestException, ValueError, TypeError, KeyError):
         return None
-

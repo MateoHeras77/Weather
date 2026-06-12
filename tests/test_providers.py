@@ -6,6 +6,7 @@ from weather_dashboard.config import load_network, load_settings
 from weather_dashboard.providers.routing import fetch_route
 from weather_dashboard.providers.traffic import fetch_incidents, parse_traffic_payload
 from weather_dashboard.providers.weather import parse_weather_payload
+from weather_dashboard.routes import request_for_corridor
 
 
 class FakeResponse:
@@ -149,8 +150,10 @@ class ProviderTests(unittest.TestCase):
 
         route = fetch_route(
             settings.tomtom_route_url,
-            corridors[0],
-            {hub.id: hub for hub in hubs},
+            request_for_corridor(
+                corridors[0],
+                {hub.id: hub for hub in hubs},
+            ),
             truck,
             "key",
             5,
@@ -168,4 +171,3 @@ class ProviderTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

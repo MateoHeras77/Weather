@@ -73,6 +73,69 @@
       "latitude": 44.6488,
       "longitude": -63.5752,
       "priority": 3
+    },
+    {
+      "id": "london",
+      "name": "London Planning Location",
+      "city": "London",
+      "province": "ON",
+      "latitude": 42.9849,
+      "longitude": -81.2453,
+      "priority": 3
+    },
+    {
+      "id": "quebec-city",
+      "name": "Quebec City Planning Location",
+      "city": "Quebec City",
+      "province": "QC",
+      "latitude": 46.8139,
+      "longitude": -71.208,
+      "priority": 3
+    },
+    {
+      "id": "moncton",
+      "name": "Moncton Planning Location",
+      "city": "Moncton",
+      "province": "NB",
+      "latitude": 46.0878,
+      "longitude": -64.7782,
+      "priority": 3
+    },
+    {
+      "id": "regina",
+      "name": "Regina Planning Location",
+      "city": "Regina",
+      "province": "SK",
+      "latitude": 50.4452,
+      "longitude": -104.6189,
+      "priority": 3
+    },
+    {
+      "id": "saskatoon",
+      "name": "Saskatoon Planning Location",
+      "city": "Saskatoon",
+      "province": "SK",
+      "latitude": 52.1579,
+      "longitude": -106.6702,
+      "priority": 3
+    },
+    {
+      "id": "kelowna",
+      "name": "Kelowna Planning Location",
+      "city": "Kelowna",
+      "province": "BC",
+      "latitude": 49.888,
+      "longitude": -119.496,
+      "priority": 3
+    },
+    {
+      "id": "victoria",
+      "name": "Victoria Planning Location",
+      "city": "Victoria",
+      "province": "BC",
+      "latitude": 48.4284,
+      "longitude": -123.3656,
+      "priority": 3
     }
   ],
   "corridors": [
@@ -157,6 +220,136 @@
       "road_numbers": ["ON-417", "A-40", "QC-40"],
       "scan_points": [
         [45.4692, -74.6372]
+      ]
+    },
+    {
+      "id": "toronto-ottawa",
+      "name": "Toronto to Ottawa",
+      "origin_hub_id": "toronto",
+      "destination_hub_id": "ottawa",
+      "priority": 5,
+      "road_numbers": ["ON-401", "401", "ON-416", "416"],
+      "scan_points": [
+        [44.2312, -76.486],
+        [44.5895, -75.6843]
+      ]
+    },
+    {
+      "id": "toronto-london",
+      "name": "Toronto to London",
+      "origin_hub_id": "toronto",
+      "destination_hub_id": "london",
+      "priority": 4,
+      "road_numbers": ["ON-401", "401", "ON-403", "403"],
+      "scan_points": [
+        [43.3616, -80.3144]
+      ]
+    },
+    {
+      "id": "montreal-quebec-city",
+      "name": "Montreal to Quebec City",
+      "origin_hub_id": "montreal",
+      "destination_hub_id": "quebec-city",
+      "priority": 4,
+      "road_numbers": ["A-20", "QC-20", "A-40", "QC-40"],
+      "scan_points": [
+        [46.3432, -72.5433]
+      ]
+    },
+    {
+      "id": "quebec-city-moncton",
+      "name": "Quebec City to Moncton",
+      "origin_hub_id": "quebec-city",
+      "destination_hub_id": "moncton",
+      "priority": 3,
+      "road_numbers": ["QC-185", "NB-2", "TRANS-CANADA HIGHWAY"],
+      "scan_points": [
+        [47.8358, -69.536],
+        [47.3739, -68.3251],
+        [46.0878, -67.0884]
+      ]
+    },
+    {
+      "id": "winnipeg-regina",
+      "name": "Winnipeg to Regina",
+      "origin_hub_id": "winnipeg",
+      "destination_hub_id": "regina",
+      "priority": 4,
+      "road_numbers": ["MB-1", "SK-1", "TRANS-CANADA HIGHWAY"],
+      "scan_points": [
+        [49.8485, -99.95],
+        [50.0405, -102.66]
+      ]
+    },
+    {
+      "id": "regina-saskatoon",
+      "name": "Regina to Saskatoon",
+      "origin_hub_id": "regina",
+      "destination_hub_id": "saskatoon",
+      "priority": 3,
+      "road_numbers": ["SK-11", "11"],
+      "scan_points": [
+        [51.278, -105.988]
+      ]
+    },
+    {
+      "id": "regina-calgary",
+      "name": "Regina to Calgary",
+      "origin_hub_id": "regina",
+      "destination_hub_id": "calgary",
+      "priority": 4,
+      "road_numbers": ["SK-1", "AB-1", "TRANS-CANADA HIGHWAY"],
+      "scan_points": [
+        [50.296, -107.797],
+        [50.0405, -110.6764]
+      ]
+    },
+    {
+      "id": "edmonton-saskatoon",
+      "name": "Edmonton to Saskatoon",
+      "origin_hub_id": "edmonton",
+      "destination_hub_id": "saskatoon",
+      "priority": 3,
+      "road_numbers": ["AB-16", "SK-16", "YELLOWHEAD HIGHWAY"],
+      "scan_points": [
+        [53.2784, -110.005],
+        [52.7575, -108.286]
+      ]
+    },
+    {
+      "id": "calgary-kelowna",
+      "name": "Calgary to Kelowna",
+      "origin_hub_id": "calgary",
+      "destination_hub_id": "kelowna",
+      "priority": 4,
+      "road_numbers": ["AB-1", "BC-1", "BC-97", "BC-5A"],
+      "scan_points": [
+        [51.1784, -115.5708],
+        [50.9981, -118.1957]
+      ]
+    },
+    {
+      "id": "kelowna-vancouver",
+      "name": "Kelowna to Vancouver",
+      "origin_hub_id": "kelowna",
+      "destination_hub_id": "vancouver",
+      "priority": 4,
+      "road_numbers": ["BC-97C", "BC-5", "BC-1"],
+      "scan_points": [
+        [49.759, -120.83],
+        [49.3824, -121.4417]
+      ]
+    },
+    {
+      "id": "vancouver-victoria",
+      "name": "Vancouver to Victoria",
+      "origin_hub_id": "vancouver",
+      "destination_hub_id": "victoria",
+      "priority": 3,
+      "road_numbers": ["BC-99", "BC-17", "TRANS-CANADA HIGHWAY"],
+      "scan_points": [
+        [49.0384, -123.0877],
+        [48.652, -123.399]
       ]
     }
   ],

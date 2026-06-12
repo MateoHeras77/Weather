@@ -15,6 +15,7 @@ from .models import (
     TrafficIncident,
     WeatherStation,
 )
+from .time_display import incident_timing_summary, local_timestamp, relative_time
 
 
 def apply_styles() -> None:
@@ -112,13 +113,17 @@ def severity_color(severity: Severity) -> str:
 
 def render_risk_card(risk: OperationalRisk) -> None:
     safe_title = html.escape(risk.title)
+    timing = ""
+    if risk.kind == "traffic":
+        incident: TrafficIncident = risk.details["incident"]
+        timing = f" · {html.escape(incident_timing_summary(incident))}"
     st.markdown(
         f"""
         <div class="risk-card" style="--risk-color:{severity_color(risk.severity)}">
           <div class="risk-level">{risk.severity.label.upper()} · {risk.kind.upper()}</div>
           <div class="risk-title">{safe_title}</div>
           <div class="risk-meta">{len(risk.affected_hub_ids)} hubs ·
-          {len(risk.affected_corridor_ids)} corridors · score {risk.score}</div>
+          {len(risk.affected_corridor_ids)} corridors · score {risk.score}{timing}</div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -224,6 +229,19 @@ def render_detail(
             f"{incident.length_m / 1000:.1f} km · "
             f"{incident.time_validity.title()}"
         )
+        st.markdown("**Incident timing**")
+        timing_columns = st.columns(3)
+        timing_values = (
+            ("Started", incident.start_time),
+            ("Last confirmed", incident.last_report_time),
+            ("Expected end", incident.end_time),
+        )
+        for column, (label, value) in zip(timing_columns, timing_values):
+            with column:
+                st.caption(label)
+                st.markdown(f"**{local_timestamp(value)}**")
+                if value is not None:
+                    st.caption(relative_time(value))
         st.link_button(
             "Open incident in Google Maps",
             (

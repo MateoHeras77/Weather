@@ -12,12 +12,14 @@ impact without leaving the dashboard.
 ## Features
 
 - National risk KPIs and ranked priority alerts
-- Clickable and clustered risk markers
+- Toronto-first full-width map with viewport-synchronized KPIs and alerts
+- Clickable and clustered risk markers with persistent selected context
 - Environment Canada alert polygons, radar, satellite, and precipitation layers
 - TomTom traffic incidents and optional traffic-flow tiles
-- Configurable hubs, corridors, risk thresholds, and truck profile
+- Configurable hubs, expanded planning corridors, risk thresholds, and truck profile
 - `Critical`, `High`, `Moderate`, and `Low` operational risk scoring
-- Contextual forecast, incident, and corridor analysis
+- Saved-lane and custom Canadian city-pair route analysis
+- Route weather waypoints, nearby incidents, and route-specific severity
 - Five-minute automatic refresh with stale and partial-outage states
 - Last-successful data preservation within the active Streamlit session
 
@@ -29,6 +31,9 @@ impact without leaving the dashboard.
 - `models.py`: normalized provider-independent records
 - `risk.py`: network impact matching and risk scoring
 - `geo.py`: distance, corridor, and traffic-scan calculations
+- `viewport.py`: Toronto defaults and visible-map risk filtering
+- `routes.py`: saved and custom route request construction
+- `route_analysis.py`: route weather sampling and incident matching
 - `map_view.py`: Folium map and layer construction
 - `ui.py`: reusable visual components and dashboard styling
 - `config.py`: versioned application and network configuration loading
@@ -69,7 +74,9 @@ Purolator data:
 - Truck profile: commercial vehicle dimensions, weight, axles, and speed
 
 The coordinates currently committed are broad planning locations and are not
-authoritative facility records.
+authoritative facility records. The saved route list contains 18 planning lanes;
+custom routing can use configured hubs or any Canadian city exposed by the
+weather dataset.
 
 Edit `config/settings.json` for:
 
@@ -100,8 +107,9 @@ uv run python -m unittest discover -s tests -v
 ```
 
 The tests cover provider parsing, TomTom closure semantics, incident
-deduplication, truck routing parameters, geographic matching, risk ranking, and
-schema variation.
+deduplication, truck routing parameters, viewport filtering, Toronto defaults,
+saved/custom route construction, route weather sampling, geographic matching,
+risk ranking, and schema variation.
 
 ## Troubleshooting
 

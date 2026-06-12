@@ -6,7 +6,7 @@ import folium
 from folium.plugins import MarkerCluster
 
 from .geo import corridor_points
-from .models import Corridor, Hub, OperationalRisk, RouteResult, Severity
+from .models import Corridor, Hub, MapBounds, OperationalRisk, RouteResult, Severity
 
 
 SEVERITY_COLORS = {
@@ -21,19 +21,15 @@ def build_map(
     risks: tuple[OperationalRisk, ...],
     hubs: tuple[Hub, ...],
     corridors: tuple[Corridor, ...],
+    center: tuple[float, float],
+    zoom: int,
+    view_bounds: MapBounds,
     selected_risk_id: str | None,
     route: RouteResult | None,
     tomtom_api_key: str | None,
 ) -> folium.Map:
-    selected = next((risk for risk in risks if risk.id == selected_risk_id), None)
-    location = (
-        [selected.latitude, selected.longitude]
-        if selected
-        else [56.1304, -106.3468]
-    )
-    zoom = 7 if selected else 4
     dashboard_map = folium.Map(
-        location=location,
+        location=center,
         zoom_start=zoom,
         tiles="OpenStreetMap",
         control_scale=True,
@@ -149,4 +145,8 @@ def build_map(
         ).add_to(dashboard_map)
 
     folium.LayerControl(collapsed=True).add_to(dashboard_map)
+    dashboard_map.get_bounds = lambda: [
+        [view_bounds.south, view_bounds.west],
+        [view_bounds.north, view_bounds.east],
+    ]
     return dashboard_map
