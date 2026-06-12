@@ -1,0 +1,17 @@
+{
+  "weather_api_url": "https://api.weather.gc.ca/collections/citypageweather-realtime/items?f=json&limit=1000",
+  "tomtom_incident_url": "https://api.tomtom.com/traffic/services/5/incidentDetails",
+  "tomtom_route_url": "https://api.tomtom.com/routing/1/calculateRoute",
+  "request_timeout_seconds": 15,
+  "weather_cache_seconds": 300,
+  "traffic_cache_seconds": 300,
+  "route_cache_seconds": 3600,
+  "stale_after_minutes": 15,
+  "user_agent": "Purolator-Network-Weather-Dashboard/1.0 operations-weather@example.invalid",
+  "risk_thresholds": {
+    "critical": 90,
+    "high": 65,
+    "moderate": 40
+  }
+}
+

@@ -1,0 +1,173 @@
+{
+  "version": 1,
+  "notes": "Planning defaults only. Replace coordinates and priorities with approved Purolator network data.",
+  "hubs": [
+    {
+      "id": "toronto",
+      "name": "Toronto Gateway",
+      "city": "Toronto",
+      "province": "ON",
+      "latitude": 43.6777,
+      "longitude": -79.6248,
+      "priority": 5
+    },
+    {
+      "id": "montreal",
+      "name": "Montreal Gateway",
+      "city": "Montreal",
+      "province": "QC",
+      "latitude": 45.4706,
+      "longitude": -73.7408,
+      "priority": 5
+    },
+    {
+      "id": "vancouver",
+      "name": "Vancouver Gateway",
+      "city": "Vancouver",
+      "province": "BC",
+      "latitude": 49.1947,
+      "longitude": -123.1792,
+      "priority": 5
+    },
+    {
+      "id": "calgary",
+      "name": "Calgary Hub",
+      "city": "Calgary",
+      "province": "AB",
+      "latitude": 51.1139,
+      "longitude": -114.0203,
+      "priority": 4
+    },
+    {
+      "id": "edmonton",
+      "name": "Edmonton Hub",
+      "city": "Edmonton",
+      "province": "AB",
+      "latitude": 53.5461,
+      "longitude": -113.4938,
+      "priority": 4
+    },
+    {
+      "id": "winnipeg",
+      "name": "Winnipeg Hub",
+      "city": "Winnipeg",
+      "province": "MB",
+      "latitude": 49.8954,
+      "longitude": -97.1385,
+      "priority": 4
+    },
+    {
+      "id": "ottawa",
+      "name": "Ottawa Hub",
+      "city": "Ottawa",
+      "province": "ON",
+      "latitude": 45.4215,
+      "longitude": -75.6972,
+      "priority": 3
+    },
+    {
+      "id": "halifax",
+      "name": "Halifax Hub",
+      "city": "Halifax",
+      "province": "NS",
+      "latitude": 44.6488,
+      "longitude": -63.5752,
+      "priority": 3
+    }
+  ],
+  "corridors": [
+    {
+      "id": "toronto-montreal",
+      "name": "Toronto to Montreal",
+      "origin_hub_id": "toronto",
+      "destination_hub_id": "montreal",
+      "priority": 5,
+      "road_numbers": ["ON-401", "401", "A-20", "QC-20", "A-40", "QC-40"],
+      "scan_points": [
+        [44.2312, -76.486],
+        [44.5895, -75.6843]
+      ]
+    },
+    {
+      "id": "montreal-halifax",
+      "name": "Montreal to Halifax",
+      "origin_hub_id": "montreal",
+      "destination_hub_id": "halifax",
+      "priority": 4,
+      "road_numbers": ["A-20", "QC-20", "QC-185", "NB-2", "NS-104", "NS-102"],
+      "scan_points": [
+        [46.8139, -71.208],
+        [47.5615, -52.7126],
+        [45.9636, -66.6431]
+      ]
+    },
+    {
+      "id": "toronto-winnipeg",
+      "name": "Toronto to Winnipeg",
+      "origin_hub_id": "toronto",
+      "destination_hub_id": "winnipeg",
+      "priority": 5,
+      "road_numbers": ["ON-400", "ON-69", "ON-17", "ON-11", "ON-102"],
+      "scan_points": [
+        [46.4917, -80.993],
+        [48.3809, -89.2477]
+      ]
+    },
+    {
+      "id": "winnipeg-calgary",
+      "name": "Winnipeg to Calgary",
+      "origin_hub_id": "winnipeg",
+      "destination_hub_id": "calgary",
+      "priority": 5,
+      "road_numbers": ["MB-1", "SK-1", "AB-1", "TRANS-CANADA HIGHWAY"],
+      "scan_points": [
+        [50.4452, -104.6189],
+        [50.0405, -110.6764]
+      ]
+    },
+    {
+      "id": "calgary-vancouver",
+      "name": "Calgary to Vancouver",
+      "origin_hub_id": "calgary",
+      "destination_hub_id": "vancouver",
+      "priority": 5,
+      "road_numbers": ["AB-1", "BC-1", "TRANS-CANADA HIGHWAY"],
+      "scan_points": [
+        [51.1784, -115.5708],
+        [50.6745, -120.3273]
+      ]
+    },
+    {
+      "id": "calgary-edmonton",
+      "name": "Calgary to Edmonton",
+      "origin_hub_id": "calgary",
+      "destination_hub_id": "edmonton",
+      "priority": 4,
+      "road_numbers": ["AB-2", "QEII"],
+      "scan_points": [
+        [52.2681, -113.8112]
+      ]
+    },
+    {
+      "id": "ottawa-montreal",
+      "name": "Ottawa to Montreal",
+      "origin_hub_id": "ottawa",
+      "destination_hub_id": "montreal",
+      "priority": 4,
+      "road_numbers": ["ON-417", "A-40", "QC-40"],
+      "scan_points": [
+        [45.4692, -74.6372]
+      ]
+    }
+  ],
+  "truck_profile": {
+    "name": "Standard linehaul tractor-trailer",
+    "max_speed_kmh": 105,
+    "weight_kg": 36000,
+    "axle_weight_kg": 9000,
+    "axles": 5,
+    "length_m": 21.0,
+    "width_m": 2.6,
+    "height_m": 4.15
+  }
+}
